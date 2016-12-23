@@ -1,0 +1,167 @@
+<apex:page controller="MergeAccountController" tabStyle="Account" id="thePage">
+    <style>
+ /* Use For Waiting Process */
+#assign-action-spinner-main {
+    position: fixed;
+    left: 0;
+    top: 0;
+    background-color:rgba(0,0,0,.6);
+    height: 100%;
+    width: 100%;
+    z-index: 999;
+    align: center;
+    vertical-align: middle;
+}
+
+#assign-action-spinner-content {
+    position: absolute; 
+    top: 50%;
+    left: 50%;
+    z-index: 1000;
+    background-color: #F5FCFF;
+    width: 204;
+    height: 40; 
+    border-radius: 1em;
+    border: 1px solid #CEECFF;
+    padding: 20px 40px 20px 40px;
+    margin-left: -116px;
+    margin-top: -36px;
+}
+#assign-action-spinner-content img {
+    width: 32;
+    height: 15;
+    align: center;
+    vertical-align: middle;
+}
+
+#assign-action-spinner-content p {
+    display: inline;
+    font-size: 135%;
+    font-weight: bold;
+}
+th, td {
+    padding: 10px;
+}
+table.messageTable tbody tr:nth-child(2) {
+    display:none;
+}
+.button {
+    background-color: #4CAF44;
+    border: none;
+    color: white;
+    padding: 11px 3px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 11px;
+    margin: 4px 2px;
+    cursor: pointer;
+    background-image: none;
+}
+    </style>
+    <!-- Status Bar -->
+        <apex:outputpanel >
+          <apex:actionStatus id="statusBar" layout="block">
+           <apex:facet name="start">
+             <div id="assign-action-spinner-main">
+                <div id="assign-action-spinner-content">
+                <img src="{!$Label.MergeAcc_LoaderIMGURL}" style= "height:40px;" alt="Processing..." 
+                                                                          title="Processing..." />
+                  &nbsp; &nbsp;
+                  <p>Processing...</p>
+               </div>
+              </div>
+            </apex:facet>
+          </apex:actionStatus>
+        </apex:outputpanel>
+      <!-- End Of Status -->
+
+    <apex:form id="theForm">
+        <apex:pageBlock >
+        <apex:pageMessages id="theErr" escape="false"/>
+            <apex:pageblockSection title="Search Accounts" rendered="{!ISNULL(matchAcc)}" columns="5"
+                id="theSection">
+                <apex:selectList id="field" value="{!selectedField}" size="1" 
+                        onchange="clearVal();" style="margin-right: 35px;">
+                    <apex:selectOptions value="{!AllFields}"/>
+                </apex:selectList>
+                <apex:selectList id="operator" value="{!operator}" size="1" style="margin-right: 35px;">
+                    <apex:selectOptions value="{!AllOperators}"/>
+                </apex:selectList>
+                <apex:inputText value="{!searchAccName}" id="theSerchStr"/>
+                <apex:commandButton value="Search" reRender="theForm" status="statusBar"/>
+            </apex:pageblockSection>
+<!--             <apex:outputPanel id="thePanel"> -->
+	            <apex:pageblockSection title="Matching Accounts" rendered="{!ISNULL(matchAcc)}" columns="1">
+	                <apex:repeat value="{!MatchingAccList}" var="ac">
+	                    <apex:commandLink value="{!ac['Name']}" 
+	                        onclick="window.open('{!CurrentURL}&slaveAcc={!ac.Id}', '_self');"
+	                        reRender="rightPanel, leftPanel" status="statusBar"/>
+	                </apex:repeat>
+	            </apex:pageblockSection>
+<!--             </apex:outputPanel> -->
+            <apex:outputPanel id="rightPanel" rendered="{!NOT(ISNULL(matchAcc))}">
+                <table id="theTable" border="1|0" 
+                            style="width:100%; border: 1px solid black; border-collapse: collapse; padding: 10px;">
+                    <thead>
+	                    <tr>
+	                       <th>Fields</th>
+	                       <th>{!masterAcc['Name']}</th>
+	                       <th>{!MatchAccount['Name']}</th>
+	                    </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <th><apex:outputText value="Select Master Record" rendered="true"/></th>
+                            <td><apex:inputCheckbox value="{!acc1}" id="theSourceId" 
+                                    onclick="selectMasterAcc (this, 'theTarId');"/></td>
+                            <td><apex:inputCheckbox value="{!acc2}" id="theTarId"
+                                    onclick="selectMasterAcc (this, 'theSourceId');"/></td>
+                        </tr>
+                        <apex:repeat value="{!AccFields}" var="field">
+                            <tr>
+                                <th>{!field.label}</th>
+                                <td><apex:outputField value="{!masterAcc[field.fieldPath]}"/></td>
+                                <td><apex:outputField value="{!slaveAcc[field.fieldPath]}"/></td>
+                            </tr>
+                        </apex:repeat>
+                    </tbody>
+                </table>
+            </apex:outputPanel>
+
+            <apex:pageblockButtons >
+                <apex:commandButton value="Merge" rendered="{!NOT(ISNULL(matchAcc))}"
+                    action="{!mergeRecords}" reRender="theForm" status="statusBar" 
+                    oncomplete="closeWindow({!isSuccess});"/>
+                <apex:commandButton value="Cancel" rendered="{!NOT(ISNULL(matchAcc))}" 
+                    action="{!cancel}" status="statusBar"/>
+            </apex:pageblockButtons>
+        </apex:pageBlock>
+        <apex:actionFunction name="clearVal" action="{!clearFilter}" reRender="theSection" 
+                status="statusBar"/>
+        <apex:actionFunction name="updateNdAccount" action="{!updateMasterAccId}" status="statusBar"
+        oncomplete="alert ('Master ND AccountId updated!'); close();" />
+    </apex:form>
+    <script type="text/javascript">
+        function selectMasterAcc (cb, cbId) {
+            var inputElem = document.getElementsByTagName("input");
+            if (cb.checked == true) {
+	            for (var i=0; i<inputElem.length; i++) {
+	               if (inputElem[i].id.indexOf(cbId) != -1)
+	                   inputElem[i].checked = false;
+	            }
+            }
+        }
+        
+        function closeWindow (mergeDone) {
+            if (mergeDone) {
+                alert ('Accounts merged successfully!');
+                close();
+            }
+        }
+        
+        function clearVal() {
+            
+        }
+    </script>
+</apex:page>
