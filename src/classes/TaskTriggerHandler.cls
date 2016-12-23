@@ -8,10 +8,6 @@
  *
  * LP URL: /space/118974/projects/show/30558937
  * Test class name- TestCreateTaskTriggerHandler
- *
- * LLC TDD (Resetting SLA Violation Date when Owner Changes):
- * https://docs.google.com/document/d/1m0q2hXBG9iMNWxxnZfsh1UQdnuDyc7PuaIdfug1rGow/edit?
-    pli=1#heading=h.fgbvonwm1jfv
  **/
 public with sharing class TaskTriggerHandler {
     public static final String STR_CLOSESTATUS = 'Completed';
