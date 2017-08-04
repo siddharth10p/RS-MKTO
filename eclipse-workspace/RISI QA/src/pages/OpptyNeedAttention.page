@@ -1,0 +1,12 @@
+<apex:page controller="OpptyNeedAttentionController">
+<div>
+    <apex:repeat value="{!OpptyList}" var="items">
+    <div>
+        <a href="{!items.objUrl}" class="opportunityMru" target="_parent">
+            <apex:image value="{!items.logoUrl}" width="16px" height="16px;"/>
+            {!items.objName}
+        </a>
+    </div>
+    </apex:repeat>
+</div>
+</apex:page>

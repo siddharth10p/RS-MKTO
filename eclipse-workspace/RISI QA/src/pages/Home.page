@@ -1,0 +1,8 @@
+<apex:page standardController="Task" 
+    action="{!IF(NOT(CONTAINS($CurrentPage.URL, '%2Fhome%2Fhome.jsp')),
+            URLFOR('/home/home.jsp'), '')}">
+    <apex:includeScript value="//code.jquery.com/jquery-3.1.0.min.js"/>
+    <base target="_top"/>
+    <apex:enhancedList type="Activity" height="500"
+    rowsPerPage="50" id="activityList" customizable="true" />
+</apex:page>
