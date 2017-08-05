@@ -4,7 +4,14 @@
  *    Author             Date (mm-dd-yyyy)    Version       ChangeLog
  * Siddharth Pandit        07/02/2016          1.0          Initial Draft
  * Siddharth Pandit        08/24/2016          1.1          Add a logic to calculate weekends
+ * Siddharth Pandit        05/25/2017          1.2          Add a logic to resolve overstamping
+ *                                                          issue. Oppty should be connected on
+ *                                                          CPs created before InOpenOppty
+ *                                                          transition until Recycle transition
  *
+ * TDD: (Connecting MQIs to Opportunities):
+ * https://docs.google.com/document/d/1m0q2hXBG9iMNWxxnZfsh1UQdnuDyc7PuaIdfug1rGow/edit?
+        pli=1#heading=h.uq6hzdnsihmp
  */
 public with sharing class UtilityGeneral {
     // private final variables
@@ -30,6 +37,7 @@ public with sharing class UtilityGeneral {
     private static final String STR_BLANKNEXT = 'Blank_Next_Value__c';
     public static final String STAGE_RECYCLED = 'Recycled';
     private static final String STAGE_INOPENOPTY = 'In Open Opportunity';
+    public static final String STR_FREETRIAL = 'Free Trial';
 
     public static Integer BATCH_START_ROWS_LIMIT = 50000000; // Used in batch
     public static Boolean recursive = true;
@@ -176,7 +184,7 @@ public with sharing class UtilityGeneral {
         } // End for
         return taskNew;
     } // End method
-    
+
     // A method that returns query, it accepts two parameters 1) fieldSet fields 2) ObjectName
     public static String getQuery (String fieldSetFields, String objName) {
         String conQueryString = VariableInitializer.STR_SELECT+ STR_SPACE;
@@ -190,14 +198,14 @@ public with sharing class UtilityGeneral {
         System.debug ('conQueryString ==> '+conQueryString);
         return conQueryString;
     } // End method
-    
+
     // A method to return true if the processed object is Contact
     public static Boolean isContactObj (Sobject leadOrConObj) {
         if (leadOrConObj == null) return null;
         return VariableInitializer.STR_CONTACT.equalsIgnoreCase (
                                     leadOrConObj.getSObjectType().getDescribe().getName());
     } // End method
-    
+
     // A method to return Map of customer path records. Three perameters need to be sent
     // 1) leadOrContactIdSet, 2) ToLifeCycleTransation 3) Boolean if MQI trigger needs tobe checked
     public static Map<String, p2s_base1__CustomerPath__c> getCustpathRecordsMap (
@@ -228,32 +236,73 @@ public with sharing class UtilityGeneral {
           return objIdCustPathMap;
     }
 
+    // A method that returns list of customer path
+    public static List<p2s_base1__CustomerPath__c> fetchCPs (Map<String, OpportunityContactRole>
+                                                                    pConOpptyIdMap) {
+        return [SELECT Id, p2s_base1__Contact__c,
+                        p2s_base1__Opportunity__c,
+                        p2s_base1__Opportunity__r.Revenue_Type__c,
+                        p2s_base1__ToLifecycleStage__c,
+                        Original_Opportunity_ID__c,
+                        p2s_base1__TransitionDateTime__c
+                    FROM p2s_base1__CustomerPath__c
+                    WHERE p2s_base1__Contact__c IN :pConOpptyIdMap.keySet()
+                    /*AND Id = 'a5560000000Chpt' */
+                    ORDER BY p2s_base1__Contact__c, 
+                    p2s_base1__TransitionDateTime__c DESC];
+    }
+
+    // A method that returns a set of Oppty which have Free Trial revenue type
+    private static Set<String> retrieveFreeTrialOppty (Map<String,
+                                                        OpportunityContactRole> pConOptyIdMap) {
+        Set<String> origionalOpptyIdSet = new Set<String> ();
+        for (p2s_base1__CustomerPath__c cPath : fetchCPs (pConOptyIdMap)) {
+            if (String.isNotBlank (cPath.Original_Opportunity_ID__c)) {
+                origionalOpptyIdSet.add (cPath.Original_Opportunity_ID__c);
+            }
+        }
+        return new Map<String, Opportunity>([SELECT Id FROM Opportunity
+                                    WHERE Id IN :origionalOpptyIdSet
+                                    AND Revenue_Type__c = : STR_FREETRIAL]).keySet ();
+    }
     // A method that updates customer path lookups by UpdateOpptyLookupOnCustPathBatch class
     public static void updateOpptyLookup (Map<String, OpportunityContactRole> pConOptyIdMap) {
         Set<String> cpIdSet = new Set<String> (); // A set to keep a track of recycled custpath
+        Set<String> inOpnOpptyCPIds = new Set<String> ();
+        Set<String> freeTrialOpptyIdSet = retrieveFreeTrialOppty (pConOptyIdMap);
         List<p2s_base1__CustomerPath__c> custPathToUpdate = 
                                 new List<p2s_base1__CustomerPath__c> ();
-        for (p2s_base1__CustomerPath__c custPath : 
-                                    [SELECT Id, p2s_base1__Contact__c,
-                                            p2s_base1__Opportunity__c,
-                                            p2s_base1__ToLifecycleStage__c,
-                                            p2s_base1__TransitionDateTime__c
-                                        FROM p2s_base1__CustomerPath__c
-                                        WHERE p2s_base1__Contact__c IN :pConOptyIdMap.keySet()
-                                        AND p2s_base1__Opportunity__c = null
-                                        ORDER BY p2s_base1__TransitionDateTime__c
-                                        DESC]) {
+        for (p2s_base1__CustomerPath__c custPath : fetchCPs (pConOptyIdMap)) {
             System.debug ('custPath ==> '+custPath);
-            if (STAGE_RECYCLED.equals (custPath.p2s_base1__ToLifecycleStage__c))
+            if (STAGE_RECYCLED.equals (custPath.p2s_base1__ToLifecycleStage__c)) {
                 cpIdSet.add (custPath.p2s_base1__Contact__c);
-            if (!cpIdSet.contains(custPath.p2s_base1__Contact__c) && 
-                pConOptyIdMap.containsKey (custPath.p2s_base1__Contact__c) &&
-                custPath.p2s_base1__TransitionDateTime__c < 
-                pConOptyIdMap.get (custPath.p2s_base1__Contact__c).CreatedDate)
-                custPath.p2s_base1__Opportunity__c = 
-                            pConOptyIdMap.get (custPath.p2s_base1__Contact__c).OpportunityId;
+            }
+            OpportunityContactRole opConRole = pConOptyIdMap.get (custPath.p2s_base1__Contact__c);
+            if (!cpIdSet.contains(custPath.p2s_base1__Contact__c) && // Incase if the latest
+            // transition is InOpenOppty the lookup should be disconnected for that one
+                !STAGE_INOPENOPTY.equals (custPath.p2s_base1__ToLifecycleStage__c) &&
+                !freeTrialOpptyIdSet.contains (custPath.Original_Opportunity_ID__c)) {
+                if (/*String.isBlank (custPath.p2s_base1__Opportunity__c) && */
+                    custPath.p2s_base1__TransitionDateTime__c < opConRole.CreatedDate) {
+                        System.debug ('opConRole.OpportunityId ==> '+opConRole.OpportunityId);
+                        System.debug ('Original Oppty ==> '+custPath.Original_Opportunity_ID__c);
+                        custPath.p2s_base1__Opportunity__c = opConRole.OpportunityId != 
+                        custPath.Original_Opportunity_ID__c ? custPath.Original_Opportunity_ID__c:
+                        opConRole.OpportunityId;
+                        System.debug ('custPath 1 ==> '+custPath);
+                    custPathToUpdate.add (custPath);
+                }
+            } else if (String.isNotBlank (custPath.p2s_base1__Opportunity__c)) {
+                custPath.p2s_base1__Opportunity__c = null;
+                custPath.Original_Opportunity_ID__c = null;
+                System.debug ('custPath 2 ==> '+custPath);
                 custPathToUpdate.add (custPath);
+            }
                 System.debug ('custPathToUpdate ==> '+custPathToUpdate);
+            if (STAGE_INOPENOPTY.equals (custPath.p2s_base1__ToLifecycleStage__c) &&
+                cpIdSet.contains(custPath.p2s_base1__Contact__c)) {
+                cpIdSet.remove (custPath.p2s_base1__Contact__c);
+            }
         } // End for
 
         if (custPathToUpdate.size () > 0)

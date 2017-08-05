@@ -8,9 +8,18 @@
  *
  * LP URL: /space/118974/projects/show/30558937
  * Test class name: TestUpdateOpptyLookupOnCustPathBatch
+ *
+ * TDD: (Connecting MQIs to Opportunities):
+ * https://docs.google.com/document/d/1m0q2hXBG9iMNWxxnZfsh1UQdnuDyc7PuaIdfug1rGow/edit?
+ *       pli=1#heading=h.uq6hzdnsihmp
  **/
 
-global class UpdateOpptyLookupOnCustPathBatch implements Database.Batchable<sObject>, Schedulable {
+global class UpdateOpptyLookupOnCustPathBatch implements Database.Batchable<sObject>,
+                                                            Schedulable, Database.Stateful {
+    public String contactId;
+    global UpdateOpptyLookupOnCustPathBatch (String pConId) {
+        contactId = pConId;
+    }
 
     global Database.Querylocator start(Database.BatchableContext BC) {
         Integer maxRows = Test.isRunningTest() ? 10 : 
@@ -18,10 +27,13 @@ global class UpdateOpptyLookupOnCustPathBatch implements Database.Batchable<sObj
         return Database.getQueryLocator([SELECT ContactId,
                                                 OpportunityId,
                                                 Opportunity.IsClosed,
+                                                Opportunity.Revenue_Type__c,
                                                 CreatedDate
                                             FROM OpportunityContactRole
-                                            WHERE CreatedDate = YESTERDAY
-                                            OR CreatedDate = TODAY
+                                            WHERE ContactId =: contactId
+                                            /*CreatedDate = YESTERDAY
+                                            OR CreatedDate = TODAY */
+                                            ORDER BY CreatedDate ASC
                                             LIMIT : maxRows]);
     }
 
@@ -36,14 +48,14 @@ global class UpdateOpptyLookupOnCustPathBatch implements Database.Batchable<sObj
 
         // Update customer paths Opporutnity lookup
         UtilityGeneral.updateOpptyLookup (conOppIdObjMap);
-        
+
         // Update contact's lifecycle stage to "In Open Opportunity"
         UtilityGeneral.updateContactLifeCycleStage (conIdSet);
     }
 
     global void execute(SchedulableContext SC) {
-        UpdateOpptyLookupOnCustPathBatch updateCustPath = new UpdateOpptyLookupOnCustPathBatch();
-        Id batchprocessid = Database.executeBatch(updateCustPath, 200);
+       // UpdateOpptyLookupOnCustPathBatch updateCustPath = new UpdateOpptyLookupOnCustPathBatch();
+       // Id batchprocessid = Database.executeBatch(updateCustPath, 200);
     }
 
     global void finish(Database.BatchableContext BC) {
