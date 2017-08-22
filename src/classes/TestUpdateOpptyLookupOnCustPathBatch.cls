@@ -16,6 +16,14 @@
  * The @isTest class annotation indicates this class only contains test
  * methods. Classes defined with the @isTest annotation do not count against
  * the organization size limit for all Apex scripts.
+ *
+ * TDD: (Connecting MQIs to Opportunities):
+ * https://docs.google.com/document/d/1m0q2hXBG9iMNWxxnZfsh1UQdnuDyc7PuaIdfug1rGow/edit?
+        pli=1#heading=h.uq6hzdnsihmp
+
+ * TDD (Determining Product and Line of Business Responsible for MQI):
+ * https://docs.google.com/document/d/1m0q2hXBG9iMNWxxnZfsh1UQdnuDyc7PuaIdfug1rGow/edit?
+    %20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20pli=1#heading=h.ni0gvo2hoe7c
  **/
 @isTest
 private class TestUpdateOpptyLookupOnCustPathBatch {
@@ -23,7 +31,6 @@ private class TestUpdateOpptyLookupOnCustPathBatch {
     static testMethod void coverUpdateOpptyLookupOnCustPathBatch () {
         // Create data
         UtilityGeneral.setUpTestData ();
-
         Test.startTest();
         UpdateOpptyLookupOnCustPathBatch updateCustPath = new UpdateOpptyLookupOnCustPathBatch();
         string schTime = '0 0 * * 1-12 ? *';
@@ -31,22 +38,23 @@ private class TestUpdateOpptyLookupOnCustPathBatch {
 
         Database.executeBatch (updateCustPath, 200);
     	Test.stopTest();
-		Opportunity oppty = [SELECT Id FROM Opportunity LIMIT 1];
+    Opportunity oppty = [SELECT Id FROM Opportunity LIMIT 1];
     	// Assertion
     	Set<String> conIdSet = new Set<String> ();
     	for (p2s_base1__CustomerPath__c custPathInstance : [SELECT Id, p2s_base1__ToLifecycleStage__c,
-		    														p2s_base1__Opportunity__c,
-		    														p2s_base1__Contact__c
-		    												FROM p2s_base1__CustomerPath__c
-		    												ORDER BY p2s_base1__TransitionDateTime__c
-		    												DESC]) {
-    		if (UtilityGeneral.STAGE_RECYCLED.equals (custPathInstance.p2s_base1__ToLifecycleStage__c))
+                                                                p2s_base1__Opportunity__c,
+                                                                p2s_base1__Contact__c
+                                                        FROM p2s_base1__CustomerPath__c
+                                                        WHERE p2s_base1__Contact__c <> null
+                                                        ORDER BY p2s_base1__TransitionDateTime__c
+                                                        DESC]) {
+        if (UtilityGeneral.STAGE_RECYCLED.equals (custPathInstance.p2s_base1__ToLifecycleStage__c))
             conIdSet.add (custPathInstance.p2s_base1__Contact__c);
         if (!conIdSet.contains (custPathInstance.p2s_base1__Contact__c))
-    			System.assertEquals (oppty.Id, custPathInstance.p2s_base1__Opportunity__c);
-    		else
-    			System.assertEquals (null, custPathInstance.p2s_base1__Opportunity__c);
-    	} // End for
+            System.assertEquals (oppty.Id, custPathInstance.p2s_base1__Opportunity__c);
+        else
+            System.assertEquals (null, custPathInstance.p2s_base1__Opportunity__c);
+        } // End for
     } // End method
 
     // A method to cover populate MQI data trigger
